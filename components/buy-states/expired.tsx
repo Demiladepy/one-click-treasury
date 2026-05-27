@@ -1,6 +1,8 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
+import { getOriginExplorerLabel, getOriginExplorerTxUrl } from "@/lib/explorer";
+import { INTENTS_CONFIG } from "@/lib/intents-config";
 
 interface ExpiredProps {
   orderId: string;
@@ -21,7 +23,7 @@ export function Expired({ orderId, txHash, onTryAgain }: ExpiredProps) {
 
       <p className="mt-3 max-w-xs text-xs leading-relaxed text-muted">
         The solver did not fill your intent before the deadline. Your USDC
-        remains locked in InputSettlerEscrow on Base. You can call{" "}
+        remains locked in InputSettlerEscrow on {INTENTS_CONFIG.originChainLabel}. You can call{" "}
         <span className="font-mono text-white/80">refund</span> on the escrow
         contract to recover your funds.
       </p>
@@ -42,11 +44,11 @@ export function Expired({ orderId, txHash, onTryAgain }: ExpiredProps) {
         </Button>
         <Button variant="outline" size="lg" className="w-full font-heading" asChild>
           <a
-            href={`https://basescan.org/tx/${txHash}`}
+            href={getOriginExplorerTxUrl(txHash)}
             target="_blank"
             rel="noopener noreferrer"
           >
-            View open tx on Basescan
+            View open tx on {getOriginExplorerLabel()}
           </a>
         </Button>
         <Button

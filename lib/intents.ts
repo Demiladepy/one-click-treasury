@@ -1,36 +1,33 @@
 import { AbiCoder, zeroPadValue } from "ethers";
 import type { Quote, OrderStatus } from "@/lib/types";
+import { INTENTS_CONFIG, IS_TESTNET } from "@/lib/intents-config";
 
-const ORDER_SERVER = "https://order.li.fi";
+const {
+  orderServer: ORDER_SERVER,
+  originChainId: BASE_CHAIN_ID,
+  destChainId: ARBITRUM_CHAIN_ID,
+  chainPrefixes: CHAIN_PREFIXES,
+  tokenInterop: TOKEN_INTEROP,
+  contracts: CONTRACTS,
+  usdcBase: USDC_BASE,
+  usdcArbitrum: USDC_ARBITRUM,
+} = INTENTS_CONFIG;
 
-/** EIP-7930 chain prefixes from the registry — not derived from chain ID */
-export const CHAIN_PREFIXES = {
-  base: "0001000002210514",
-  arbitrum: "0001000002A4B114",
-} as const;
+export {
+  CHAIN_PREFIXES,
+  TOKEN_INTEROP,
+  CONTRACTS,
+  USDC_BASE,
+  USDC_ARBITRUM,
+  BASE_CHAIN_ID,
+  ARBITRUM_CHAIN_ID,
+};
 
-export const TOKEN_INTEROP = {
-  USDC_BASE:
-    "0x0001000002210514833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
-  USDC_ARBITRUM:
-    "0x0001000002A4B114af88d065e77c8cC2239327C5EDb3A432268e5831",
-} as const;
+export { INTENTS_CONFIG, INTENTS_ENV, IS_TESTNET } from "@/lib/intents-config";
 
-export const CONTRACTS = {
-  INPUT_SETTLER_ESCROW: "0x000025c3226C00B2Cdc200005a1600509f4e00C0",
-  POLYMER_ORACLE: "0x0000003E06000007A224AeE90052fA6bb46d43C9",
-  OUTPUT_SETTLER: "0x0000000000eC36B683C2E6AC89e9A75989C22a2e",
-} as const;
-
-export const USDC_BASE = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
-export const USDC_ARBITRUM =
-  "0xaf88d065e77c8cC2239327C5EDb3A432268e5831";
-
-export const BASE_CHAIN_ID = 8453;
-export const ARBITRUM_CHAIN_ID = 42161;
-
-const STANDARD_ORDER_TYPE =
-  "tuple(address user, uint256 nonce, uint256 originChainId, uint32 expires, uint32 fillDeadline, address inputOracle, uint256[2][] inputs, tuple(bytes32 oracle, bytes32 settler, uint256 chainId, bytes32 token, uint256 amount, bytes32 recipient, bytes call, bytes context)[] outputs)";
+export function getOrderServerUrl(): string {
+  return ORDER_SERVER;
+}
 
 export interface EncodedOrder {
   encoded: `0x${string}`;
@@ -143,7 +140,13 @@ export async function requestQuote({
 
   const data = (await response.json()) as RawQuoteResponse;
   const best = data.quotes?.[0];
-  if (!best) throw new Error("No quotes returned from order server");
+  if (!best) {
+    throw new Error(
+      IS_TESTNET
+        ? "No testnet solvers available for Base Sepolia → Arbitrum Sepolia right now. Try again later or switch to mainnet mode."
+        : "No quotes returned from the order server. Try a different amount or retry shortly."
+    );
+  }
 
   return normalizeQuote(best);
 }
@@ -185,7 +188,9 @@ export function buildStandardOrder({
   };
 
   const encoded = AbiCoder.defaultAbiCoder().encode(
-    [STANDARD_ORDER_TYPE],
+    [
+      "tuple(address user, uint256 nonce, uint256 originChainId, uint32 expires, uint32 fillDeadline, address inputOracle, uint256[2][] inputs, tuple(bytes32 oracle, bytes32 settler, uint256 chainId, bytes32 token, uint256 amount, bytes32 recipient, bytes call, bytes context)[] outputs)",
+    ],
     [order]
   ) as `0x${string}`;
 

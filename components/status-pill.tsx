@@ -1,5 +1,6 @@
 "use client";
 
+import { IS_TESTNET } from "@/lib/intents-config";
 import { motion } from "framer-motion";
 
 export function StatusPill() {
@@ -15,7 +16,7 @@ export function StatusPill() {
         <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
       </span>
       <span className="font-mono text-xs text-muted">
-        OIF · Mainnet demo live
+        OIF · {IS_TESTNET ? "Base Sepolia testnet" : "Mainnet demo live"}
       </span>
     </motion.div>
   );

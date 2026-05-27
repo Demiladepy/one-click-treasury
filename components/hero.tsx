@@ -4,6 +4,7 @@ import { motion } from "framer-motion";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { IS_TESTNET } from "@/lib/intents-config";
 
 const ease = [0.22, 1, 0.36, 1] as const;
 
@@ -72,8 +73,8 @@ export function Hero() {
           transition={{ duration: 0.7, delay: 0.4, ease }}
           className="mt-8 max-w-md text-sm leading-relaxed text-muted md:text-base"
         >
-          Learn the architecture in four chapters. Then run a live intent on
-          mainnet.
+          Learn the architecture in four chapters. Then run a live intent on{" "}
+          {IS_TESTNET ? "Base Sepolia testnet" : "mainnet"}.
         </motion.p>
 
         <motion.div

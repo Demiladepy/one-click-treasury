@@ -15,7 +15,6 @@ import {
   useWriteContract,
 } from "wagmi";
 import { readContract, waitForTransactionReceipt } from "@wagmi/core";
-import { base } from "wagmi/chains";
 import { toast } from "sonner";
 import { GradientMeshBackground } from "@/components/gradient-mesh-background";
 import { DebugDisclosure } from "@/components/debug-disclosure";
@@ -28,12 +27,14 @@ import { Executing } from "@/components/buy-states/executing";
 import { Done } from "@/components/buy-states/done";
 import { Expired } from "@/components/buy-states/expired";
 import { erc20Abi, inputSettlerEscrowAbi } from "@/lib/abis";
-import { wagmiConfig } from "@/lib/wagmi";
+import { originChain, wagmiConfig } from "@/lib/wagmi";
 import {
   buildStandardOrder,
   CONTRACTS,
   extractOrderIdFromReceipt,
   fetchOrderStatus,
+  getOrderServerUrl,
+  INTENTS_CONFIG,
   pollOrderStatus,
   requestQuote,
   truncateOrderId,
@@ -232,34 +233,34 @@ export function BuyFlow() {
   >("idle");
   const refreshStatusRef = useRef<(() => Promise<void>) | null>(null);
 
-  const isOnBase = chainId === base.id;
+  const isOnOriginChain = chainId === originChain.id;
 
   const addTape = useCallback((prefix: Parameters<typeof createTapeEvent>[0], message: string) => {
     dispatch({ type: "ADD_TAPE_EVENT", event: createTapeEvent(prefix, message) });
   }, []);
 
-  const ensureBaseChain = useCallback(async (): Promise<boolean> => {
-    if (isOnBase) return true;
+  const ensureOriginChain = useCallback(async (): Promise<boolean> => {
+    if (isOnOriginChain) return true;
     try {
-      await switchChainAsync({ chainId: base.id });
+      await switchChainAsync({ chainId: originChain.id });
       return true;
     } catch {
-      toast.error("Switch to Base to continue", {
+      toast.error(`Switch to ${INTENTS_CONFIG.originChainLabel} to continue`, {
         action: {
           label: "Retry",
-          onClick: () => switchChain({ chainId: base.id }),
+          onClick: () => switchChain({ chainId: originChain.id }),
         },
       });
       return false;
     }
-  }, [isOnBase, switchChain, switchChainAsync]);
+  }, [isOnOriginChain, switchChain, switchChainAsync]);
 
   const handleGetQuote = useCallback(async () => {
     if (!address) return;
-    const onBase = await ensureBaseChain();
-    if (!onBase) return;
+    const onOrigin = await ensureOriginChain();
+    if (!onOrigin) return;
     dispatch({ type: "START_QUOTE" });
-  }, [address, ensureBaseChain]);
+  }, [address, ensureOriginChain]);
 
   // Quote fetch
   useEffect(() => {
@@ -278,9 +279,13 @@ export function BuyFlow() {
           "QUOTE",
           `Solver quoted ${formatUsdcRaw(quote.preview.inputs[0].amount)} USDC ← input for ${formatUsdcRaw(quote.preview.outputs[0].amount)} USDC ← output`
         );
-      } catch {
+      } catch (error) {
         if (cancelled) return;
-        toast.error("Couldn't reach the order server. Retry?", {
+        const message =
+          error instanceof Error
+            ? error.message
+            : "Couldn't reach the order server. Retry?";
+        toast.error(message, {
           action: {
             label: "Retry",
             onClick: () => dispatch({ type: "START_QUOTE" }),
@@ -382,7 +387,7 @@ export function BuyFlow() {
           abi: erc20Abi,
           functionName: "allowance",
           args: [address, CONTRACTS.INPUT_SETTLER_ESCROW as `0x${string}`],
-          chainId: base.id,
+          chainId: originChain.id,
         });
 
         if (allowance < BigInt(inputAmount)) {
@@ -397,7 +402,7 @@ export function BuyFlow() {
                 CONTRACTS.INPUT_SETTLER_ESCROW as `0x${string}`,
                 BigInt(inputAmount),
               ],
-              chainId: base.id,
+              chainId: originChain.id,
             });
           } catch (error) {
             if (isUserRejection(error)) {
@@ -411,7 +416,7 @@ export function BuyFlow() {
           dispatch({ type: "SET_APPROVE_TX_HASH", hash: approveHash });
           await waitForTransactionReceipt(wagmiConfig, {
             hash: approveHash,
-            chainId: base.id,
+            chainId: originChain.id,
           });
           addTape("TX", `Approval confirmed (${truncateHash(approveHash)})`);
         }
@@ -435,7 +440,7 @@ export function BuyFlow() {
             abi: inputSettlerEscrowAbi,
             functionName: "open",
             args: [encoded],
-            chainId: base.id,
+            chainId: originChain.id,
           });
         } catch (error) {
           if (isUserRejection(error)) {
@@ -448,7 +453,7 @@ export function BuyFlow() {
 
         const receipt = await waitForTransactionReceipt(wagmiConfig, {
           hash: openHash,
-          chainId: base.id,
+          chainId: originChain.id,
         });
 
         dispatch({ type: "SET_OPEN_TX_HASH", hash: openHash });
@@ -459,7 +464,7 @@ export function BuyFlow() {
         dispatch({ type: "SET_ORDER_ID", orderId });
         addTape(
           "OPEN",
-          `Order opened on Base, ID ${truncateHash(orderId)}`
+          `Order opened on ${INTENTS_CONFIG.originChainLabel}, ID ${truncateHash(orderId)}`
         );
         dispatch({ type: "COMPLETE_EXECUTION_STEP", step: 1 });
         dispatch({ type: "SET_EXECUTION_STEP", step: 2 });
@@ -537,7 +542,10 @@ export function BuyFlow() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.step, state.executionKey, address]);
 
-  const subtitle = getComposeSubtitle(state.amount);
+  const subtitle = getComposeSubtitle(
+    state.amount,
+    INTENTS_CONFIG.destChainLabel
+  );
   const displayOrderId = state.orderId
     ? truncateOrderId(state.orderId)
     : "Pending…";
@@ -571,8 +579,11 @@ export function BuyFlow() {
             className="mt-3 text-sm leading-relaxed text-muted"
           >
             {subtitle} Each step maps to the lifecycle above — quote from{" "}
-            <span className="font-mono text-white/70">order.li.fi</span>,
-            escrow on Base, delivery on Arbitrum.
+            <span className="font-mono text-white/70">
+              {getOrderServerUrl().replace("https://", "")}
+            </span>
+            , escrow on {INTENTS_CONFIG.originChainLabel}, delivery on{" "}
+            {INTENTS_CONFIG.destChainLabel}.
           </motion.p>
         </div>
 
@@ -598,8 +609,10 @@ export function BuyFlow() {
                     }
                     onGetQuote={handleGetQuote}
                     isConnected={isConnected}
-                    isOnBase={isOnBase}
-                    onSwitchChain={() => switchChain({ chainId: base.id })}
+                    isOnOriginChain={isOnOriginChain}
+                    originChainLabel={INTENTS_CONFIG.originChainLabel}
+                    destChainLabel={INTENTS_CONFIG.destChainLabel}
+                    onSwitchChain={() => switchChain({ chainId: originChain.id })}
                     isSwitching={isSwitching}
                   />
                 )}
@@ -610,6 +623,8 @@ export function BuyFlow() {
                   <Review
                     quote={state.quote}
                     quoteExpired={state.quoteExpired}
+                    originChainLabel={INTENTS_CONFIG.originChainLabel}
+                    destChainLabel={INTENTS_CONFIG.destChainLabel}
                     onConfirm={() => dispatch({ type: "CONFIRM" })}
                     onChangeAmount={() =>
                       dispatch({ type: "CHANGE_AMOUNT" })

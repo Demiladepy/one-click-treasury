@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import confetti from "canvas-confetti";
 import { Button } from "@/components/ui/button";
 import { AnimatedCheckmark } from "@/components/animated-checkmark";
+import { getDestChainLabel, getOriginExplorerLabel, getOriginExplorerTxUrl } from "@/lib/explorer";
 import { formatTokenAmountFromRaw } from "@/lib/types";
 
 interface DoneProps {
@@ -52,22 +53,22 @@ export function Done({ receiveAmountRaw, txHash, onBuyMore }: DoneProps) {
 
       <h3 className="font-heading text-lg font-semibold tracking-tight text-white">
         Settled. You now hold {formatTokenAmountFromRaw(receiveAmountRaw)} USDC
-        on Arbitrum.
+        on {getDestChainLabel()}.
       </h3>
 
       <p className="mt-3 max-w-xs text-xs leading-relaxed text-muted">
-        On mainnet, the next step is swapping to USDY or OUSG via the same
+        In production, the next step is swapping to USDY or OUSG via the same
         intent rails.
       </p>
 
       <div className="mt-8 flex w-full flex-col gap-3">
         <Button variant="primary" size="lg" className="w-full font-heading" asChild>
           <a
-            href={`https://basescan.org/tx/${txHash}`}
+            href={getOriginExplorerTxUrl(txHash)}
             target="_blank"
             rel="noopener noreferrer"
           >
-            View on Etherscan
+            View on {getOriginExplorerLabel()}
           </a>
         </Button>
         <Button

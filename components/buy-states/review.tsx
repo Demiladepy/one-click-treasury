@@ -7,6 +7,8 @@ import { formatUsdcRaw } from "@/lib/types";
 interface ReviewProps {
   quote: Quote;
   quoteExpired: boolean;
+  originChainLabel: string;
+  destChainLabel: string;
   onConfirm: () => void;
   onChangeAmount: () => void;
   onRefreshQuote: () => void;
@@ -20,6 +22,8 @@ function formatDeadline(validUntil: number): string {
 export function Review({
   quote,
   quoteExpired,
+  originChainLabel,
+  destChainLabel,
   onConfirm,
   onChangeAmount,
   onRefreshQuote,
@@ -38,7 +42,7 @@ export function Review({
           <div className="flex items-center justify-between">
             <span className="text-xs text-muted">You pay</span>
             <span className="font-mono text-sm text-white">
-              ~{formatUsdcRaw(inputAmount)} USDC on Base
+              ~{formatUsdcRaw(inputAmount)} USDC on {originChainLabel}
             </span>
           </div>
 
@@ -69,7 +73,7 @@ export function Review({
           <div className="flex items-center justify-between">
             <span className="text-xs text-muted">You receive</span>
             <span className="font-mono text-sm text-white">
-              {formatUsdcRaw(outputAmount)} USDC on Arbitrum
+              {formatUsdcRaw(outputAmount)} USDC on {destChainLabel}
             </span>
           </div>
         </div>

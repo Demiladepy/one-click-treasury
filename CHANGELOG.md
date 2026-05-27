@@ -8,6 +8,18 @@
 - Dynamic OG image (`app/opengraph-image.tsx`) for X/Twitter previews
 - Expired order state with refund docs link
 
+### Verified testnet run (Base Sepolia)
+
+Wallet `0x0C503557CC81701037240e982c9520Aa1ffca4Cc`:
+- **USDC balance:** 20.00 USDC on Base Sepolia (Circle test USDC `0x036CbD…`)
+- **ETH balance:** 0 — needs Base Sepolia ETH for approve + open txs (Alchemy/Circle faucet)
+- **Quote API (`order-dev.li.fi`):** HTTP 200 but **0 solver quotes** for Base Sepolia → Arbitrum Sepolia at time of test (testnet liquidity is intermittent)
+
+```
+Verified testnet open tx: pending — blocked on (1) gas ETH and (2) solver quotes
+Run: npm run test:quote
+```
+
 ### Verified mainnet run
 
 ```

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import { ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { INTENTS_CONFIG, IS_TESTNET } from "@/lib/intents-config";
 
 export function DemoCta() {
   return (
@@ -23,12 +24,14 @@ export function DemoCta() {
             Hands-on
           </p>
           <h2 className="font-heading text-2xl font-semibold tracking-tight md:text-3xl">
-            See the architecture execute on mainnet
+            See the architecture execute on{" "}
+            {IS_TESTNET ? "testnet" : "mainnet"}
           </h2>
           <p className="mx-auto mt-4 max-w-xl text-sm leading-relaxed text-muted md:text-base">
             The live demo walks quote → approve → open → poll — with an Intent
-            Theater timeline and a technical deep-dive sheet. Base USDC in,
-            exact-output USDC on Arbitrum out.
+            Theater timeline and a technical deep-dive sheet.{" "}
+            {INTENTS_CONFIG.originChainLabel} USDC in, exact-output USDC on{" "}
+            {INTENTS_CONFIG.destChainLabel} out.
           </p>
           <Button asChild variant="primary" size="lg" className="mt-8 font-heading">
             <Link href="/buy" className="gap-2">
