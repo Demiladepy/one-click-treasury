@@ -6,29 +6,27 @@ import { Zap, Network, CheckCircle } from "lucide-react";
 const steps = [
   {
     icon: Zap,
-    title: "You express an intent",
+    title: "1 · Express",
     description:
-      "Tell us what you want, not how. We handle the chain and route logic.",
+      "Your app sends an interoperable intent to order.li.fi — exact-output in this demo, so the Arbitrum USDC amount is fixed and input is solver-quoted.",
   },
   {
     icon: Network,
-    title: "Solvers compete",
+    title: "2 · Match",
     description:
-      "LI.FI's solver marketplace matches your intent against standing quotes — best price wins.",
+      "The order server returns standing quotes from the solver network. Index 0 is best price. No routing UI — the marketplace decides.",
   },
   {
     icon: CheckCircle,
-    title: "You receive exactly what you asked for",
+    title: "3 · Settle",
     description:
-      "Exact-output execution. The destination amount is fixed. Solvers handle slippage.",
+      "User approves + opens escrow on Base. Solver delivers on Arbitrum. Polymer attests. Escrow releases. Status: Open → Signed → Delivered → Settled.",
   },
 ];
 
 const containerVariants = {
   hidden: {},
-  visible: {
-    transition: { staggerChildren: 0.15 },
-  },
+  visible: { transition: { staggerChildren: 0.15 } },
 };
 
 const cardVariants = {
@@ -44,18 +42,27 @@ export function HowItWorks() {
   return (
     <section
       id="how-it-works"
-      className="relative z-10 px-6 py-24 md:px-12 md:py-32"
+      className="relative z-10 border-t border-white/[0.06] px-6 py-24 md:px-12 md:py-32"
     >
       <div className="mx-auto max-w-6xl">
-        <motion.h2
+        <motion.div
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, margin: "-100px" }}
           transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
-          className="mb-16 text-center font-heading text-3xl font-semibold tracking-tight md:text-4xl"
+          className="mb-16 max-w-3xl"
         >
-          How it works
-        </motion.h2>
+          <p className="mb-3 font-mono text-xs uppercase tracking-[0.2em] text-purple-400">
+            Chapter 03
+          </p>
+          <h2 className="font-heading text-3xl font-semibold tracking-tight md:text-4xl">
+            The intent lifecycle
+          </h2>
+          <p className="mt-4 text-muted">
+            Three phases every integrator implements — whether you&apos;re
+            building payments, RWAs, or agentic commerce on OIF rails.
+          </p>
+        </motion.div>
 
         <motion.div
           variants={containerVariants}
@@ -75,7 +82,6 @@ export function HowItWorks() {
               }}
               className="group relative rounded-xl p-[1px]"
               style={{
-                // 1px gradient border at 30% opacity
                 background:
                   "linear-gradient(135deg, rgba(153, 69, 255, 0.3) 0%, rgba(20, 241, 149, 0.3) 100%)",
               }}

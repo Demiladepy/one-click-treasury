@@ -12,7 +12,8 @@ export function Footer() {
       />
       <div className="mx-auto flex max-w-6xl flex-col items-center gap-6 text-center md:flex-row md:justify-between md:text-left">
         <p className="max-w-xs text-xs leading-relaxed text-muted">
-          Built for the LI.FI Builders Intents Mini Challenge
+          An interactive guide to LI.FI Intents — built for the Builders
+          Intents Mini Challenge
         </p>
 
         <nav className="flex flex-wrap items-center justify-center gap-4 text-xs text-muted">

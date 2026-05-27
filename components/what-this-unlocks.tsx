@@ -56,8 +56,16 @@ export function WhatThisUnlocks() {
           transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
           className="mb-16 text-center font-heading text-3xl font-semibold tracking-tight md:text-4xl"
         >
-          What this unlocks
+          What builders build with Intents
         </motion.h2>
+        <motion.p
+          initial={{ opacity: 0 }}
+          whileInView={{ opacity: 1 }}
+          viewport={{ once: true }}
+          className="mx-auto -mt-12 mb-16 max-w-2xl text-center text-sm text-muted"
+        >
+          Three launch pillars — same intent rails, different products.
+        </motion.p>
 
         <motion.div
           variants={containerVariants}

@@ -15,7 +15,7 @@ export function StatusPill() {
         <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
       </span>
       <span className="font-mono text-xs text-muted">
-        LI.FI Intents — live
+        OIF · Mainnet demo live
       </span>
     </motion.div>
   );

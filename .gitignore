@@ -39,6 +39,9 @@ secrets.json
 credentials.json
 *.credentials
 
+# editor / local tooling (may contain tokens)
+.cursor/
+
 # vercel
 .vercel
 

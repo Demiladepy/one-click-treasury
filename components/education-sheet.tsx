@@ -41,13 +41,13 @@ export function EducationSheet() {
           className="interactive-glow fixed bottom-6 right-6 z-40 flex items-center gap-2 rounded-full border border-white/10 bg-surface/90 px-4 py-2.5 text-sm text-muted shadow-lg backdrop-blur-md transition-colors hover:text-white"
         >
           <Info className="h-4 w-4" />
-          Why this works
+          Deep dive: the technical story
         </button>
       </SheetTrigger>
       <SheetContent className="max-w-[480px] overflow-y-auto bg-surface sm:max-w-[480px]">
         <SheetHeader>
           <SheetTitle className="font-heading text-xl tracking-tight">
-            Why this works
+            Deep dive: the technical story
           </SheetTitle>
         </SheetHeader>
         <div className="mt-6 space-y-8">

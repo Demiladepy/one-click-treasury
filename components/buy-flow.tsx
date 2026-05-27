@@ -18,7 +18,6 @@ import { readContract, waitForTransactionReceipt } from "@wagmi/core";
 import { base } from "wagmi/chains";
 import { toast } from "sonner";
 import { GradientMeshBackground } from "@/components/gradient-mesh-background";
-import { GrainOverlay } from "@/components/grain-overlay";
 import { DebugDisclosure } from "@/components/debug-disclosure";
 import { IntentTheater } from "@/components/intent-theater";
 import { EducationSheet } from "@/components/education-sheet";
@@ -544,9 +543,8 @@ export function BuyFlow() {
     : "Pending…";
 
   return (
-    <div className="relative flex min-h-screen flex-col items-center justify-center px-6 py-12 pb-24">
+    <div className="relative flex min-h-screen flex-col items-center justify-center px-6 pb-24 pt-24">
       <GradientMeshBackground />
-      <GrainOverlay />
       <EducationSheet />
 
       <div className="relative z-10 w-full max-w-[480px]">
@@ -555,29 +553,26 @@ export function BuyFlow() {
             href="/"
             className="mb-6 inline-block text-sm text-muted transition-colors hover:text-white"
           >
-            ← Home
+            ← Back to the guide
           </Link>
-          <div className="flex flex-col gap-0.5">
-            <span className="font-heading text-xs font-semibold uppercase tracking-[0.2em] text-gradient-primary">
-              LI.FI Intents
-            </span>
-            <span className="font-heading text-sm font-medium tracking-tight text-white/80">
-              One-Click Treasury
-            </span>
-          </div>
         </div>
 
         <div className="mb-6">
+          <p className="mb-2 font-mono text-xs uppercase tracking-[0.2em] text-purple-400">
+            Interactive lab
+          </p>
           <h1 className="font-heading text-[32px] font-semibold leading-tight tracking-tight">
-            Buy tokenized treasuries
+            Run an exact-output intent
           </h1>
           <motion.p
             key={subtitle}
             initial={{ opacity: 0.6 }}
             animate={{ opacity: 1 }}
-            className="mt-2 text-sm text-muted"
+            className="mt-3 text-sm leading-relaxed text-muted"
           >
-            {subtitle}
+            {subtitle} Each step maps to the lifecycle above — quote from{" "}
+            <span className="font-mono text-white/70">order.li.fi</span>,
+            escrow on Base, delivery on Arbitrum.
           </motion.p>
         </div>
 
