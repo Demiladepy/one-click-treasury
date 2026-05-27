@@ -1,0 +1,40 @@
+export const erc20Abi = [
+  {
+    type: "function",
+    name: "approve",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "spender", type: "address" },
+      { name: "amount", type: "uint256" },
+    ],
+    outputs: [{ type: "bool" }],
+  },
+  {
+    type: "function",
+    name: "allowance",
+    stateMutability: "view",
+    inputs: [
+      { name: "owner", type: "address" },
+      { name: "spender", type: "address" },
+    ],
+    outputs: [{ type: "uint256" }],
+  },
+] as const;
+
+export const inputSettlerEscrowAbi = [
+  {
+    type: "function",
+    name: "open",
+    stateMutability: "nonpayable",
+    inputs: [{ name: "order", type: "bytes" }],
+    outputs: [],
+  },
+  {
+    type: "event",
+    name: "Open",
+    inputs: [
+      { name: "orderId", type: "bytes32", indexed: true },
+      { name: "order", type: "bytes", indexed: false },
+    ],
+  },
+] as const;

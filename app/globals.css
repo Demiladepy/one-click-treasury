@@ -1,0 +1,129 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}
+
+@layer utilities {
+  .text-gradient-primary {
+    @apply bg-gradient-primary bg-clip-text text-transparent;
+  }
+
+  /* Hero headline — mint at ascenders/descenders for legibility on dark bg */
+  .text-gradient-hero {
+    background: linear-gradient(
+      180deg,
+      #14F195 0%,
+      #9945FF 28%,
+      #9945FF 72%,
+      #14F195 100%
+    );
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  .interactive-glow {
+    transition: box-shadow 0.3s ease, transform 0.3s ease;
+  }
+
+  .interactive-glow:hover {
+    box-shadow: inset 0 0 20px rgba(153, 69, 255, 0.2);
+  }
+
+  .cta-gradient-sweep {
+    background-size: 200% 200%;
+    animation: gradient-sweep 4s ease infinite;
+  }
+}
+
+/* GPU-only mesh blobs — no filter:blur (expensive repaints) */
+.mesh-blob {
+  position: absolute;
+  width: min(720px, 90vmax);
+  height: min(720px, 90vmax);
+  border-radius: 50%;
+  opacity: 0.55;
+  will-change: transform;
+  contain: layout style paint;
+}
+
+.mesh-blob-purple {
+  left: -20%;
+  top: -20%;
+  background: radial-gradient(
+    circle,
+    rgba(153, 69, 255, 0.5) 0%,
+    rgba(153, 69, 255, 0.12) 42%,
+    transparent 68%
+  );
+  animation: mesh-drift-a 40s linear infinite;
+}
+
+.mesh-blob-mint {
+  right: -20%;
+  bottom: -20%;
+  background: radial-gradient(
+    circle,
+    rgba(20, 241, 149, 0.38) 0%,
+    rgba(20, 241, 149, 0.1) 42%,
+    transparent 68%
+  );
+  animation: mesh-drift-b 40s linear infinite;
+}
+
+@keyframes mesh-drift-a {
+  0% {
+    transform: rotate(0deg) scale(1);
+  }
+  25% {
+    transform: rotate(90deg) scale(1.12);
+  }
+  50% {
+    transform: rotate(180deg) scale(1);
+  }
+  75% {
+    transform: rotate(270deg) scale(1.12);
+  }
+  100% {
+    transform: rotate(360deg) scale(1);
+  }
+}
+
+@keyframes mesh-drift-b {
+  0% {
+    transform: rotate(360deg) scale(1.08);
+  }
+  25% {
+    transform: rotate(270deg) scale(1);
+  }
+  50% {
+    transform: rotate(180deg) scale(1.08);
+  }
+  75% {
+    transform: rotate(90deg) scale(1);
+  }
+  100% {
+    transform: rotate(0deg) scale(1.08);
+  }
+}
+
+@keyframes gradient-sweep {
+  0%,
+  100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+}
