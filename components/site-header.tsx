@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { ConnectButton } from "@rainbow-me/rainbowkit";
 
 export function SiteHeader() {
   return (
@@ -15,7 +14,6 @@ export function SiteHeader() {
             Intent Architecture Guide
           </span>
         </Link>
-        <ConnectButton />
       </div>
     </header>
   );
