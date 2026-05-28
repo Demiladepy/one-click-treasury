@@ -9,6 +9,9 @@ interface ReviewProps {
   quoteExpired: boolean;
   originChainLabel: string;
   destChainLabel: string;
+  solverLabel: string;
+  fillDeadlineLabel: string;
+  settlesInLabel: string;
   onConfirm: () => void;
   onChangeAmount: () => void;
   onRefreshQuote: () => void;
@@ -24,6 +27,9 @@ export function Review({
   quoteExpired,
   originChainLabel,
   destChainLabel,
+  solverLabel,
+  fillDeadlineLabel,
+  settlesInLabel,
   onConfirm,
   onChangeAmount,
   onRefreshQuote,
@@ -81,12 +87,9 @@ export function Review({
         <div className="h-px bg-white/10" />
 
         <div className="space-y-3">
-          <DetailRow label="Solver" value="LI.FI Solver Pool" />
-          <DetailRow
-            label="Fill deadline"
-            value={formatDeadline(quote.validUntil)}
-          />
-          <DetailRow label="Settles in" value="~12 seconds" />
+          <DetailRow label="Solver" value={solverLabel} />
+          <DetailRow label="Fill deadline" value={fillDeadlineLabel} />
+          <DetailRow label="Settles in" value={settlesInLabel} />
         </div>
 
         <div className="space-y-3 pt-2">
@@ -97,7 +100,7 @@ export function Review({
             disabled={quoteExpired}
             onClick={onConfirm}
           >
-            Confirm and pay
+            Confirm and continue
           </Button>
           <button
             type="button"

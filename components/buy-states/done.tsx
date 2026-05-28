@@ -4,16 +4,16 @@ import { useEffect, useRef } from "react";
 import confetti from "canvas-confetti";
 import { Button } from "@/components/ui/button";
 import { AnimatedCheckmark } from "@/components/animated-checkmark";
-import { getDestChainLabel, getOriginExplorerLabel, getOriginExplorerTxUrl } from "@/lib/explorer";
 import { formatTokenAmountFromRaw } from "@/lib/types";
+import Link from "next/link";
 
 interface DoneProps {
   receiveAmountRaw: string;
-  txHash: string;
-  onBuyMore: () => void;
+  destChainLabel: string;
+  onReplay: () => void;
 }
 
-export function Done({ receiveAmountRaw, txHash, onBuyMore }: DoneProps) {
+export function Done({ receiveAmountRaw, destChainLabel, onReplay }: DoneProps) {
   const fired = useRef(false);
 
   useEffect(() => {
@@ -52,32 +52,28 @@ export function Done({ receiveAmountRaw, txHash, onBuyMore }: DoneProps) {
       <AnimatedCheckmark size={80} className="mb-6" />
 
       <h3 className="font-heading text-lg font-semibold tracking-tight text-white">
-        Settled. You now hold {formatTokenAmountFromRaw(receiveAmountRaw)} USDC
-        on {getDestChainLabel()}.
+        Settled. Exactly {formatTokenAmountFromRaw(receiveAmountRaw)} USDC delivered on {destChainLabel}.
       </h3>
 
       <p className="mt-3 max-w-xs text-xs leading-relaxed text-muted">
-        In production, the next step is swapping to USDY or OUSG via the same
-        intent rails.
+        The user fixed the output. The solver absorbed the slippage and got paid only after the oracle verified delivery.
+      </p>
+
+      <p className="mt-4 max-w-xs text-[11px] leading-relaxed text-muted/70">
+        Concept walkthrough — no live transaction. The same flow runs on testnet and mainnet with the same contracts.
       </p>
 
       <div className="mt-8 flex w-full flex-col gap-3">
-        <Button variant="primary" size="lg" className="w-full font-heading" asChild>
-          <a
-            href={getOriginExplorerTxUrl(txHash)}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            View on {getOriginExplorerLabel()}
-          </a>
-        </Button>
         <Button
-          variant="outline"
+          variant="primary"
           size="lg"
           className="w-full font-heading"
-          onClick={onBuyMore}
+          onClick={onReplay}
         >
-          Buy more
+          Replay ↺
+        </Button>
+        <Button variant="outline" size="lg" className="w-full font-heading" asChild>
+          <Link href="/">Back to the guide</Link>
         </Button>
       </div>
     </div>

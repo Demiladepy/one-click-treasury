@@ -1,21 +1,8 @@
 "use client";
 
-import {
-  useReducer,
-  useEffect,
-  useCallback,
-  useRef,
-} from "react";
+import { useReducer, useEffect, useCallback, useMemo, useRef } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
-import {
-  useAccount,
-  useChainId,
-  useSwitchChain,
-  useWriteContract,
-} from "wagmi";
-import { readContract, waitForTransactionReceipt } from "@wagmi/core";
-import { toast } from "sonner";
 import { GradientMeshBackground } from "@/components/gradient-mesh-background";
 import { DebugDisclosure } from "@/components/debug-disclosure";
 import { IntentTheater } from "@/components/intent-theater";
@@ -26,21 +13,6 @@ import { Review } from "@/components/buy-states/review";
 import { Executing } from "@/components/buy-states/executing";
 import { Done } from "@/components/buy-states/done";
 import { Expired } from "@/components/buy-states/expired";
-import { erc20Abi, inputSettlerEscrowAbi } from "@/lib/abis";
-import { originChain, wagmiConfig } from "@/lib/wagmi";
-import {
-  buildStandardOrder,
-  CONTRACTS,
-  extractOrderIdFromReceipt,
-  fetchOrderStatus,
-  getOrderServerUrl,
-  INTENTS_CONFIG,
-  pollOrderStatus,
-  requestQuote,
-  truncateOrderId,
-  USDC_BASE,
-  usdToUsdcRaw,
-} from "@/lib/intents";
 import {
   type BuyFlowAction,
   type BuyFlowContext,
@@ -49,8 +21,41 @@ import {
   INITIAL_BUY_FLOW,
   createTapeEvent,
   formatUsdcRaw,
-  truncateHash,
 } from "@/lib/types";
+
+/**
+ * If true, review auto-advances after `TIMING.reviewHoldMs`.
+ * Default false so filming can pause for voiceover.
+ */
+const AUTO_ADVANCE_REVIEW = false;
+
+/** All timings live here so voiceover pacing is easy to tune. */
+const TIMING = {
+  /** Quoting state: loader + “Asking solvers…” copy */
+  quotingMs: 2500,
+  /** Review state: how long we hold before auto-advance (if enabled) */
+  reviewHoldMs: 3500,
+  /** Executing step 1: “Expressing the intent” */
+  step1Ms: 2500,
+  /** Executing step 2: “Locking funds in escrow …” */
+  step2Ms: 3000,
+  /** Executing step 3: “Solver delivering …” */
+  step3Ms: 3500,
+  /** Tape feed pacing (roughly 1 line per ~800–900ms) */
+  tapeIntervalMs: 850,
+} as const;
+
+const SCRIPT = {
+  amountUsd: "10",
+  originChainLabel: "Base Sepolia",
+  destChainLabel: "Arbitrum Sepolia",
+  outputUsdcRaw: "10000000", // 10.00 USDC (6 decimals)
+  inputUsdcRaw: "10040000", // ~10.04 USDC (scripted example)
+  solver: "0x7a3f…b21c (best of 4 quotes)",
+  orderId: "0xa1b2…9f4d",
+  orderIdFull:
+    "0xa1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8090a1b2c3d4e5f6a7b89f4d",
+} as const;
 
 function buyFlowReducer(
   state: BuyFlowContext,
@@ -188,22 +193,6 @@ const stateTransition = {
   transition: { duration: 0.4, ease: "easeOut" as const },
 };
 
-function isUserRejection(error: unknown): boolean {
-  if (typeof error !== "object" || error === null) return false;
-  const e = error as {
-    code?: number | string;
-    message?: string;
-    shortMessage?: string;
-  };
-  return (
-    e.code === 4001 ||
-    e.code === "ACTION_REJECTED" ||
-    (e.message?.toLowerCase().includes("user rejected") ?? false) ||
-    (e.message?.toLowerCase().includes("user denied") ?? false) ||
-    (e.shortMessage?.toLowerCase().includes("user rejected") ?? false)
-  );
-}
-
 function mapStatusToTheaterStage(status: OrderStatus): TheaterStage {
   switch (status) {
     case "Open":
@@ -219,86 +208,106 @@ function mapStatusToTheaterStage(status: OrderStatus): TheaterStage {
 }
 
 export function BuyFlow() {
-  const [state, dispatch] = useReducer(buyFlowReducer, INITIAL_BUY_FLOW);
-  const { address, isConnected } = useAccount();
-  const chainId = useChainId();
-  const { switchChain, switchChainAsync, isPending: isSwitching } =
-    useSwitchChain();
-  const { writeContractAsync } = useWriteContract();
+  const [state, dispatch] = useReducer(buyFlowReducer, {
+    ...INITIAL_BUY_FLOW,
+    amount: SCRIPT.amountUsd,
+  });
 
-  const pollAbortRef = useRef<AbortController | null>(null);
+  const scriptAbortRef = useRef<AbortController | null>(null);
   const prevStatusRef = useRef<OrderStatus | null>(null);
-  const executionPhaseRef = useRef<
-    "idle" | "approving" | "opening" | "polling"
-  >("idle");
-  const refreshStatusRef = useRef<(() => Promise<void>) | null>(null);
-
-  const isOnOriginChain = chainId === originChain.id;
+  const isPlayingRef = useRef(false);
 
   const addTape = useCallback((prefix: Parameters<typeof createTapeEvent>[0], message: string) => {
     dispatch({ type: "ADD_TAPE_EVENT", event: createTapeEvent(prefix, message) });
   }, []);
 
-  const ensureOriginChain = useCallback(async (): Promise<boolean> => {
-    if (isOnOriginChain) return true;
-    try {
-      await switchChainAsync({ chainId: originChain.id });
-      return true;
-    } catch {
-      toast.error(`Switch to ${INTENTS_CONFIG.originChainLabel} to continue`, {
-        action: {
-          label: "Retry",
-          onClick: () => switchChain({ chainId: originChain.id }),
+  const exampleQuote = useMemo(() => {
+    // A representative quote object (no network calls).
+    return {
+      quoteId: "quote_example_123",
+      validUntil: Date.now() + 30 * 60 * 1000,
+      preview: {
+        inputs: [{ amount: SCRIPT.inputUsdcRaw }],
+        outputs: [{ amount: SCRIPT.outputUsdcRaw }],
+      },
+      raw: {
+        quoteId: "quote_example_123",
+        validUntil: Math.floor(Date.now() / 1000) + 1800,
+        preview: {
+          inputs: [
+            {
+              amount: SCRIPT.inputUsdcRaw,
+              user: "0x00010000022105140c503557cc81701037240e982c9520aa1ffca4cc",
+              asset: "0x0001000002210514036cbd53842c5426634e7929541ec2318f3dcf7e",
+            },
+          ],
+          outputs: [
+            {
+              amount: SCRIPT.outputUsdcRaw,
+              asset: "0x0001000002A4B11475faf11459e6544fe646f2799650e567be7b86af",
+              receiver:
+                "0x0001000002A4B1140c503557cc81701037240e982c9520aa1ffca4cc",
+            },
+          ],
         },
-      });
-      return false;
-    }
-  }, [isOnOriginChain, switchChain, switchChainAsync]);
-
-  const handleGetQuote = useCallback(async () => {
-    if (!address) return;
-    const onOrigin = await ensureOriginChain();
-    if (!onOrigin) return;
-    dispatch({ type: "START_QUOTE" });
-  }, [address, ensureOriginChain]);
-
-  // Quote fetch
-  useEffect(() => {
-    if (state.step !== "quoting" || !address) return;
-
-    let cancelled = false;
-
-    (async () => {
-      try {
-        const outputAmount = usdToUsdcRaw(state.amount);
-        const quote = await requestQuote({ userAddress: address, outputAmount });
-        if (cancelled) return;
-
-        dispatch({ type: "QUOTE_RECEIVED", quote });
-        addTape(
-          "QUOTE",
-          `Solver quoted ${formatUsdcRaw(quote.preview.inputs[0].amount)} USDC ← input for ${formatUsdcRaw(quote.preview.outputs[0].amount)} USDC ← output`
-        );
-      } catch (error) {
-        if (cancelled) return;
-        const message =
-          error instanceof Error
-            ? error.message
-            : "Couldn't reach the order server. Retry?";
-        toast.error(message, {
-          action: {
-            label: "Retry",
-            onClick: () => dispatch({ type: "START_QUOTE" }),
-          },
-        });
-        dispatch({ type: "QUOTE_FAILED" });
-      }
-    })();
-
-    return () => {
-      cancelled = true;
+        metadata: { exclusiveFor: "0x7a3f00000000000000000000000000000000b21c" },
+      },
     };
-  }, [state.step, state.amount, address, addTape]);
+  }, []);
+
+  const resetToPaused = useCallback(() => {
+    scriptAbortRef.current?.abort();
+    scriptAbortRef.current = null;
+    isPlayingRef.current = false;
+    prevStatusRef.current = null;
+    dispatch({ type: "RESET" });
+    dispatch({ type: "SET_AMOUNT", amount: SCRIPT.amountUsd });
+  }, []);
+
+  const play = useCallback(async () => {
+    if (isPlayingRef.current) return;
+    isPlayingRef.current = true;
+
+    const abort = new AbortController();
+    scriptAbortRef.current = abort;
+
+    const sleep = (ms: number) =>
+      new Promise<void>((resolve, reject) => {
+        const t = setTimeout(resolve, ms);
+        abort.signal.addEventListener(
+          "abort",
+          () => {
+            clearTimeout(t);
+            reject(new Error("aborted"));
+          },
+          { once: true }
+        );
+      });
+
+    try {
+      // Compose -> Quoting
+      dispatch({ type: "START_QUOTE" });
+      addTape(
+        "QUOTE",
+        `Expressed: exactly ${formatUsdcRaw(SCRIPT.outputUsdcRaw, 3)} USDC on ${SCRIPT.destChainLabel}`
+      );
+      await sleep(TIMING.quotingMs);
+
+      // Quoting -> Review
+      dispatch({ type: "QUOTE_RECEIVED", quote: exampleQuote });
+      addTape(
+        "QUOTE",
+        `4 solvers quoted · best: ${formatUsdcRaw(SCRIPT.inputUsdcRaw)} USDC input for ${formatUsdcRaw(SCRIPT.outputUsdcRaw)} output`
+      );
+
+      if (AUTO_ADVANCE_REVIEW) {
+        await sleep(TIMING.reviewHoldMs);
+        dispatch({ type: "CONFIRM" });
+      }
+    } catch {
+      // aborted via reset/replay
+    }
+  }, [addTape, exampleQuote]);
 
   // Quote expiry watcher on review screen
   useEffect(() => {
@@ -329,225 +338,109 @@ export function BuyFlow() {
     });
   }, [state.orderStatus, addTape]);
 
-  const handleRefreshStatus = useCallback(async () => {
-    if (!state.orderId) return;
-    dispatch({ type: "INCREMENT_POLL_REFRESH" });
-    try {
-      const status = await fetchOrderStatus(state.orderId);
-      dispatch({ type: "SET_ORDER_STATUS", status });
-      dispatch({ type: "SET_POLLING_FAILED", failed: false });
-
-      if (status === "Settled") {
-        dispatch({ type: "COMPLETE_EXECUTION_STEP", step: 2 });
-        addTape("SETTLE", "Solver paid out of escrow. Done.");
-        dispatch({
-          type: "EXECUTION_DONE",
-          orderId: state.orderId,
-          txHash: state.openTxHash!,
-        });
-      } else if (status === "Expired") {
-        dispatch({
-          type: "EXECUTION_EXPIRED",
-          orderId: state.orderId,
-          txHash: state.openTxHash!,
-        });
-      }
-    } catch {
-      dispatch({ type: "SET_POLLING_FAILED", failed: true });
-      toast.error("Status refresh failed", {
-        action: {
-          label: "Retry",
-          onClick: () => refreshStatusRef.current?.(),
-        },
-      });
-    }
-  }, [state.orderId, state.openTxHash, addTape]);
-
-  refreshStatusRef.current = handleRefreshStatus;
-
-  // On-chain execution
+  // Scripted execution (no wallet, no network)
   useEffect(() => {
-    if (state.step !== "executing" || !address || !state.quote) return;
+    if (state.step !== "executing" || !state.quote) return;
 
     const abort = new AbortController();
-    pollAbortRef.current = abort;
-    executionPhaseRef.current = "approving";
+    scriptAbortRef.current = abort;
     prevStatusRef.current = null;
 
-    const runExecution = async () => {
-      const quote = state.quote!;
-      const inputAmount = quote.preview.inputs[0].amount;
-      const outputAmount = quote.preview.outputs[0].amount;
-
-      try {
-        dispatch({ type: "SET_EXECUTION_STEP", step: 0 });
-
-        const allowance = await readContract(wagmiConfig, {
-          address: USDC_BASE as `0x${string}`,
-          abi: erc20Abi,
-          functionName: "allowance",
-          args: [address, CONTRACTS.INPUT_SETTLER_ESCROW as `0x${string}`],
-          chainId: originChain.id,
-        });
-
-        if (allowance < BigInt(inputAmount)) {
-          executionPhaseRef.current = "approving";
-          let approveHash: `0x${string}`;
-          try {
-            approveHash = await writeContractAsync({
-              address: USDC_BASE as `0x${string}`,
-              abi: erc20Abi,
-              functionName: "approve",
-              args: [
-                CONTRACTS.INPUT_SETTLER_ESCROW as `0x${string}`,
-                BigInt(inputAmount),
-              ],
-              chainId: originChain.id,
-            });
-          } catch (error) {
-            if (isUserRejection(error)) {
-              toast.error("Approval cancelled. No funds moved.");
-              dispatch({ type: "APPROVAL_REJECTED" });
-              return;
-            }
-            throw error;
-          }
-
-          dispatch({ type: "SET_APPROVE_TX_HASH", hash: approveHash });
-          await waitForTransactionReceipt(wagmiConfig, {
-            hash: approveHash,
-            chainId: originChain.id,
-          });
-          addTape("TX", `Approval confirmed (${truncateHash(approveHash)})`);
-        }
-
-        dispatch({ type: "COMPLETE_EXECUTION_STEP", step: 0 });
-        dispatch({ type: "SET_EXECUTION_STEP", step: 1 });
-        dispatch({ type: "SET_THEATER_STAGE", stage: 2 });
-
-        const { encoded } = buildStandardOrder({
-          userAddress: address,
-          inputAmount,
-          outputAmount,
-        });
-        dispatch({ type: "SET_ENCODED_ORDER", encoded });
-
-        executionPhaseRef.current = "opening";
-        let openHash: `0x${string}`;
-        try {
-          openHash = await writeContractAsync({
-            address: CONTRACTS.INPUT_SETTLER_ESCROW as `0x${string}`,
-            abi: inputSettlerEscrowAbi,
-            functionName: "open",
-            args: [encoded],
-            chainId: originChain.id,
-          });
-        } catch (error) {
-          if (isUserRejection(error)) {
-            toast.error("Order cancelled. No funds moved.");
-            dispatch({ type: "OPEN_REJECTED" });
-            return;
-          }
-          throw error;
-        }
-
-        const receipt = await waitForTransactionReceipt(wagmiConfig, {
-          hash: openHash,
-          chainId: originChain.id,
-        });
-
-        dispatch({ type: "SET_OPEN_TX_HASH", hash: openHash });
-
-        const orderId = extractOrderIdFromReceipt(receipt.logs);
-        if (!orderId) throw new Error("Could not extract order ID from Open event");
-
-        dispatch({ type: "SET_ORDER_ID", orderId });
-        addTape(
-          "OPEN",
-          `Order opened on ${INTENTS_CONFIG.originChainLabel}, ID ${truncateHash(orderId)}`
+    const sleep = (ms: number) =>
+      new Promise<void>((resolve, reject) => {
+        const t = setTimeout(resolve, ms);
+        abort.signal.addEventListener(
+          "abort",
+          () => {
+            clearTimeout(t);
+            reject(new Error("aborted"));
+          },
+          { once: true }
         );
-        dispatch({ type: "COMPLETE_EXECUTION_STEP", step: 1 });
-        dispatch({ type: "SET_EXECUTION_STEP", step: 2 });
-        dispatch({ type: "SET_THEATER_STAGE", stage: 3 });
+      });
 
-        executionPhaseRef.current = "polling";
+    const run = async () => {
+      dispatch({ type: "SET_EXECUTION_STEP", step: 0 });
+      dispatch({ type: "SET_THEATER_STAGE", stage: 1 });
 
-        try {
-          const finalStatus = await pollOrderStatus(
-            orderId,
-            (status) => dispatch({ type: "SET_ORDER_STATUS", status }),
-            abort.signal
-          );
+      const tape: Array<Parameters<typeof addTape>> = [
+        [
+          "QUOTE",
+          `Expressed: exactly ${formatUsdcRaw(SCRIPT.outputUsdcRaw, 3)} USDC on ${SCRIPT.destChainLabel}`,
+        ],
+        [
+          "QUOTE",
+          `4 solvers quoted · best: ${formatUsdcRaw(SCRIPT.inputUsdcRaw)} USDC input for ${formatUsdcRaw(SCRIPT.outputUsdcRaw)} output`,
+        ],
+        ["STATUS", `Order server matched intent → solver ${SCRIPT.solver}`],
+        ["TX", `Funds locked in InputSettlerEscrow on ${SCRIPT.originChainLabel}`],
+        ["OPEN", `Order opened · ID ${SCRIPT.orderId}`],
+        ["STATUS", "Open → Signed"],
+        ["TX", `Solver delivered ${formatUsdcRaw(SCRIPT.outputUsdcRaw, 3)} USDC on ${SCRIPT.destChainLabel}`],
+        ["STATUS", "Signed → Delivered"],
+        ["TX", "Polymer oracle attested delivery"],
+        ["SETTLE", "Escrow released to solver · Open → Signed → Delivered → Settled"],
+      ];
 
-          if (finalStatus === "Expired") {
-            dispatch({
-              type: "EXECUTION_EXPIRED",
-              orderId,
-              txHash: openHash,
-            });
-            return;
-          }
-
-          addTape("SETTLE", "Solver paid out of escrow. Done.");
-          dispatch({ type: "COMPLETE_EXECUTION_STEP", step: 2 });
-          dispatch({
-            type: "EXECUTION_DONE",
-            orderId,
-            txHash: openHash,
-          });
-        } catch (pollError) {
+      const startTape = async () => {
+        for (const [prefix, message] of tape) {
           if (abort.signal.aborted) return;
-          dispatch({ type: "SET_POLLING_FAILED", failed: true });
-          toast.error("Status polling paused", {
-            description: "Use Refresh status below to continue tracking.",
-            action: {
-              label: "Refresh",
-              onClick: () => refreshStatusRef.current?.(),
-            },
-          });
+          addTape(prefix, message);
+          // eslint-disable-next-line no-await-in-loop
+          await sleep(TIMING.tapeIntervalMs);
         }
-      } catch (error) {
-        if (abort.signal.aborted) return;
+      };
 
-        const phase = executionPhaseRef.current;
-        if (phase === "approving" && isUserRejection(error)) {
-          toast.error("Approval cancelled. No funds moved.");
-          dispatch({ type: "APPROVAL_REJECTED" });
-          return;
-        }
-        if (phase === "opening" && isUserRejection(error)) {
-          toast.error("Order cancelled. No funds moved.");
-          dispatch({ type: "OPEN_REJECTED" });
-          return;
-        }
+      // Start tape feed without layout-jank.
+      void startTape();
 
-        toast.error(
-          error instanceof Error ? error.message : "Execution failed",
-          {
-            action: {
-              label: "Retry",
-              onClick: () => dispatch({ type: "RETRY_EXECUTION" }),
-            },
-          }
-        );
-      }
+      // Step 1
+      await sleep(TIMING.step1Ms);
+      dispatch({ type: "COMPLETE_EXECUTION_STEP", step: 0 });
+      dispatch({ type: "SET_EXECUTION_STEP", step: 1 });
+      dispatch({ type: "SET_THEATER_STAGE", stage: 2 });
+
+      // Step 2
+      await sleep(TIMING.step2Ms);
+      dispatch({ type: "COMPLETE_EXECUTION_STEP", step: 1 });
+      dispatch({ type: "SET_EXECUTION_STEP", step: 2 });
+      dispatch({ type: "SET_THEATER_STAGE", stage: 3 });
+      dispatch({ type: "SET_ORDER_ID", orderId: SCRIPT.orderIdFull });
+      dispatch({ type: "SET_ORDER_STATUS", status: "Open" });
+      await sleep(900);
+      dispatch({ type: "SET_ORDER_STATUS", status: "Signed" });
+
+      // Step 3
+      await sleep(Math.max(0, TIMING.step3Ms - 900));
+      dispatch({ type: "SET_ORDER_STATUS", status: "Delivered" });
+      await sleep(900);
+      dispatch({ type: "SET_ORDER_STATUS", status: "Settled" });
+      dispatch({ type: "COMPLETE_EXECUTION_STEP", step: 2 });
+      dispatch({ type: "SET_THEATER_STAGE", stage: 4 });
+
+      dispatch({
+        type: "EXECUTION_DONE",
+        orderId: SCRIPT.orderIdFull,
+        txHash: "0x0000000000000000000000000000000000000000000000000000000000000000",
+      });
     };
 
-    runExecution();
+    run().catch(() => null);
 
-    return () => {
-      abort.abort();
-      pollAbortRef.current = null;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.step, state.executionKey, address]);
+    return () => abort.abort();
+  }, [state.step, state.executionKey, state.quote, addTape]);
 
-  const subtitle = getComposeSubtitle(
-    state.amount,
-    INTENTS_CONFIG.destChainLabel
-  );
+  // Auto-advance review (optional)
+  useEffect(() => {
+    if (!AUTO_ADVANCE_REVIEW) return;
+    if (state.step !== "review") return;
+    const t = window.setTimeout(() => dispatch({ type: "CONFIRM" }), TIMING.reviewHoldMs);
+    return () => window.clearTimeout(t);
+  }, [state.step]);
+
+  const subtitle = getComposeSubtitle(state.amount, SCRIPT.destChainLabel);
   const displayOrderId = state.orderId
-    ? truncateOrderId(state.orderId)
+    ? `${state.orderId.slice(0, 6)}...${state.orderId.slice(-4)}`
     : "Pending…";
 
   return (
@@ -578,12 +471,10 @@ export function BuyFlow() {
             animate={{ opacity: 1 }}
             className="mt-3 text-sm leading-relaxed text-muted"
           >
-            {subtitle} Each step maps to the lifecycle above — quote from{" "}
-            <span className="font-mono text-white/70">
-              {getOrderServerUrl().replace("https://", "")}
+            {subtitle}
+            <span className="block pt-1 text-[12px] text-muted/80">
+              No wallet needed. Watch how an intent flows from request to settlement — concept first, keys later.
             </span>
-            , escrow on {INTENTS_CONFIG.originChainLabel}, delivery on{" "}
-            {INTENTS_CONFIG.destChainLabel}.
           </motion.p>
         </div>
 
@@ -607,13 +498,10 @@ export function BuyFlow() {
                     onAmountChange={(amount) =>
                       dispatch({ type: "SET_AMOUNT", amount })
                     }
-                    onGetQuote={handleGetQuote}
-                    isConnected={isConnected}
-                    isOnOriginChain={isOnOriginChain}
-                    originChainLabel={INTENTS_CONFIG.originChainLabel}
-                    destChainLabel={INTENTS_CONFIG.destChainLabel}
-                    onSwitchChain={() => switchChain({ chainId: originChain.id })}
-                    isSwitching={isSwitching}
+                    originChainLabel={SCRIPT.originChainLabel}
+                    destChainLabel={SCRIPT.destChainLabel}
+                    onPlay={play}
+                    onSkipToEnd={() => dispatch({ type: "CONFIRM" })}
                   />
                 )}
 
@@ -623,8 +511,11 @@ export function BuyFlow() {
                   <Review
                     quote={state.quote}
                     quoteExpired={state.quoteExpired}
-                    originChainLabel={INTENTS_CONFIG.originChainLabel}
-                    destChainLabel={INTENTS_CONFIG.destChainLabel}
+                    originChainLabel={SCRIPT.originChainLabel}
+                    destChainLabel={SCRIPT.destChainLabel}
+                    solverLabel={SCRIPT.solver}
+                    settlesInLabel="~15 seconds"
+                    fillDeadlineLabel="30 min"
                     onConfirm={() => dispatch({ type: "CONFIRM" })}
                     onChangeAmount={() =>
                       dispatch({ type: "CHANGE_AMOUNT" })
@@ -641,9 +532,6 @@ export function BuyFlow() {
                       orderId={displayOrderId}
                       fullOrderId={state.orderId}
                       orderStatus={state.orderStatus}
-                      pollingFailed={state.pollingFailed}
-                      pollRefreshCount={state.pollRefreshCount}
-                      onRefreshStatus={handleRefreshStatus}
                     />
                     <IntentTheater
                       theaterStage={state.theaterStage}
@@ -652,11 +540,11 @@ export function BuyFlow() {
                   </>
                 )}
 
-                {state.step === "done" && state.quote && state.openTxHash && (
+                {state.step === "done" && state.quote && (
                   <Done
                     receiveAmountRaw={state.quote.preview.outputs[0].amount}
-                    txHash={state.openTxHash}
-                    onBuyMore={() => dispatch({ type: "RESET" })}
+                    destChainLabel={SCRIPT.destChainLabel}
+                    onReplay={resetToPaused}
                   />
                 )}
 
@@ -677,8 +565,12 @@ export function BuyFlow() {
 
       <DebugDisclosure
         quote={state.quote}
-        encodedOrder={state.encodedOrder}
-        orderId={state.orderId}
+        orderId={SCRIPT.orderIdFull}
+        encodedOrder={
+          "0x" +
+          "00".repeat(32) +
+          "… (representative ABI-encoded StandardOrder bytes)"
+        }
       />
     </div>
   );
