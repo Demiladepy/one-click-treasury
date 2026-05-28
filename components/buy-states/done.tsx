@@ -11,9 +11,15 @@ interface DoneProps {
   receiveAmountRaw: string;
   destChainLabel: string;
   onReplay: () => void;
+  confettiDelayMs?: number;
 }
 
-export function Done({ receiveAmountRaw, destChainLabel, onReplay }: DoneProps) {
+export function Done({
+  receiveAmountRaw,
+  destChainLabel,
+  onReplay,
+  confettiDelayMs = 650,
+}: DoneProps) {
   const fired = useRef(false);
 
   useEffect(() => {
@@ -22,30 +28,34 @@ export function Done({ receiveAmountRaw, destChainLabel, onReplay }: DoneProps) 
 
     const colors = ["#9945FF", "#14F195", "#FF6B9D", "#F0B90B"];
 
-    confetti({
-      particleCount: 80,
-      spread: 70,
-      origin: { y: 0.6 },
-      colors,
-    });
+    const t = window.setTimeout(() => {
+      confetti({
+        particleCount: 80,
+        spread: 70,
+        origin: { y: 0.6 },
+        colors,
+      });
 
-    setTimeout(() => {
-      confetti({
-        particleCount: 40,
-        angle: 60,
-        spread: 55,
-        origin: { x: 0, y: 0.65 },
-        colors,
-      });
-      confetti({
-        particleCount: 40,
-        angle: 120,
-        spread: 55,
-        origin: { x: 1, y: 0.65 },
-        colors,
-      });
-    }, 200);
-  }, []);
+      window.setTimeout(() => {
+        confetti({
+          particleCount: 40,
+          angle: 60,
+          spread: 55,
+          origin: { x: 0, y: 0.65 },
+          colors,
+        });
+        confetti({
+          particleCount: 40,
+          angle: 120,
+          spread: 55,
+          origin: { x: 1, y: 0.65 },
+          colors,
+        });
+      }, 200);
+    }, confettiDelayMs);
+
+    return () => window.clearTimeout(t);
+  }, [confettiDelayMs]);
 
   return (
     <div className="flex flex-col items-center py-6 text-center">

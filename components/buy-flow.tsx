@@ -43,6 +43,8 @@ const TIMING = {
   step3Ms: 3500,
   /** Tape feed pacing (roughly 1 line per ~800–900ms) */
   tapeIntervalMs: 850,
+  /** Confetti fires shortly after the Done screen appears */
+  confettiDelayMs: 650,
 } as const;
 
 const SCRIPT = {
@@ -56,6 +58,19 @@ const SCRIPT = {
   orderIdFull:
     "0xa1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8090a1b2c3d4e5f6a7b89f4d",
 } as const;
+
+const SCRIPTED_TAPE = [
+  { prefix: "QUOTE", message: "INTENT  Expressed: exactly 10.000 USDC on Arbitrum Sepolia" },
+  { prefix: "QUOTE", message: "QUOTE   4 solvers quoted · best: 10.04 USDC input for 10.00 output" },
+  { prefix: "STATUS", message: "MATCH   Order server matched intent → solver 0x7a3f…b21c" },
+  { prefix: "TX", message: "LOCK    Funds locked in InputSettlerEscrow on Base Sepolia" },
+  { prefix: "OPEN", message: "OPEN    Order opened · ID 0xa1b2…9f4d" },
+  { prefix: "STATUS", message: "STATUS  Open → Signed" },
+  { prefix: "TX", message: "FILL    Solver delivered 10.000 USDC on Arbitrum Sepolia" },
+  { prefix: "STATUS", message: "STATUS  Signed → Delivered" },
+  { prefix: "TX", message: "VERIFY  Polymer oracle attested delivery" },
+  { prefix: "SETTLE", message: "SETTLE  Escrow released to solver · Open → Signed → Delivered → Settled" },
+] as const;
 
 function buyFlowReducer(
   state: BuyFlowContext,
@@ -363,36 +378,20 @@ export function BuyFlow() {
       dispatch({ type: "SET_EXECUTION_STEP", step: 0 });
       dispatch({ type: "SET_THEATER_STAGE", stage: 1 });
 
-      const tape: Array<Parameters<typeof addTape>> = [
-        [
-          "QUOTE",
-          `Expressed: exactly ${formatUsdcRaw(SCRIPT.outputUsdcRaw, 3)} USDC on ${SCRIPT.destChainLabel}`,
-        ],
-        [
-          "QUOTE",
-          `4 solvers quoted · best: ${formatUsdcRaw(SCRIPT.inputUsdcRaw)} USDC input for ${formatUsdcRaw(SCRIPT.outputUsdcRaw)} output`,
-        ],
-        ["STATUS", `Order server matched intent → solver ${SCRIPT.solver}`],
-        ["TX", `Funds locked in InputSettlerEscrow on ${SCRIPT.originChainLabel}`],
-        ["OPEN", `Order opened · ID ${SCRIPT.orderId}`],
-        ["STATUS", "Open → Signed"],
-        ["TX", `Solver delivered ${formatUsdcRaw(SCRIPT.outputUsdcRaw, 3)} USDC on ${SCRIPT.destChainLabel}`],
-        ["STATUS", "Signed → Delivered"],
-        ["TX", "Polymer oracle attested delivery"],
-        ["SETTLE", "Escrow released to solver · Open → Signed → Delivered → Settled"],
-      ];
-
-      const startTape = async () => {
-        for (const [prefix, message] of tape) {
+      // Schedule the tape feed so it never “dumps” all at once.
+      const tapeTimers: number[] = [];
+      SCRIPTED_TAPE.forEach((line, i) => {
+        const id = window.setTimeout(() => {
           if (abort.signal.aborted) return;
-          addTape(prefix, message);
-          // eslint-disable-next-line no-await-in-loop
-          await sleep(TIMING.tapeIntervalMs);
-        }
-      };
-
-      // Start tape feed without layout-jank.
-      void startTape();
+          addTape(line.prefix, line.message);
+        }, i * TIMING.tapeIntervalMs);
+        tapeTimers.push(id);
+      });
+      abort.signal.addEventListener(
+        "abort",
+        () => tapeTimers.forEach((id) => window.clearTimeout(id)),
+        { once: true }
+      );
 
       // Step 1
       await sleep(TIMING.step1Ms);
@@ -545,6 +544,7 @@ export function BuyFlow() {
                     receiveAmountRaw={state.quote.preview.outputs[0].amount}
                     destChainLabel={SCRIPT.destChainLabel}
                     onReplay={resetToPaused}
+                    confettiDelayMs={TIMING.confettiDelayMs}
                   />
                 )}
 
